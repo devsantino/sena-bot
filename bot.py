@@ -2,7 +2,6 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 import asyncio
-import random
 
 intents = discord.Intents.default()
 intents.typing = False
@@ -52,22 +51,12 @@ class TicketView(discord.ui.View):
         await channel.send(f"📩 تم فتح التيكت بواسطة {interaction.user.mention}")
         await interaction.response.send_message(f"✅ تم فتح تيكت جديد: {channel.mention}", ephemeral=True)
 
-@bot.tree.command(name="ticket", description="افتح تيكت جديد")
-async def ticket(interaction: discord.Interaction):
+@bot.tree.command(name="setup_ticket", description="إعداد زر فتح تيكت")
+@commands.has_permissions(administrator=True)
+async def setup_ticket(interaction: discord.Interaction):
     view = TicketView()
-    await interaction.response.send_message("اضغط على الزر أدناه لفتح تيكت جديد.", view=view, ephemeral=True)
+    await interaction.channel.send("اضغط على الزر لفتح تيكت جديد", view=view)
+    await interaction.response.send_message("✅ تم إعداد نظام التيكت بنجاح!", ephemeral=True)
 
 # -------------------- تشغيل البوت --------------------
-
-import os
-import discord
-from discord.ext import commands
-
-intents = discord.Intents.default()
-bot = commands.Bot(command_prefix='!', intents=intents)
-
-@bot.event
-async def on_ready():
-    print(f'{bot.user} is now online!')
-
-bot.run(os.getenv('TOKEN'))  # تأكد أن هذا السطر موجود ويستخدم os.getenv
+bot.run("YOUR_BOT_TOKEN")
