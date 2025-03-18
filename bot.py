@@ -1,133 +1,105 @@
 import discord
 from discord import app_commands
-from discord.ext import commands, tasks
+from discord.ext import commands
 import asyncio
-import random
 
 intents = discord.Intents.default()
-intents.messages = True
+intents.typing = False
+intents.presences = False
 intents.guilds = True
+intents.messages = True
 intents.members = True
-intents.message_content = True
 
-bot = commands.Bot(command_prefix="!", intents=intents)
-duty_list = []
+bot = commands.Bot(command_prefix='!', intents=intents)
 
-# إدارة - أوامر مثل البان والكيك والمزيد
-@bot.tree.command(name="ban")
-@app_commands.checks.has_permissions(ban_members=True)
-async def ban(interaction: discord.Interaction, member: discord.Member, reason: str = "غير محدد"):
-    if member.id == bot.owner_id:
-        await interaction.response.send_message("❌ لا يمكن طرد صاحب البوت.")
-    else:
-        await member.ban(reason=reason)
-        await interaction.response.send_message(f"✅ تم حظر {member.mention} بنجاح. السبب: {reason}")
+OWNER_ID = 760949680355278848  # استبدل هذا بمعرفك الشخصي
 
-@bot.tree.command(name="kick")
-@app_commands.checks.has_permissions(kick_members=True)
-async def kick(interaction: discord.Interaction, member: discord.Member, reason: str = "غير محدد"):
-    if member.id == bot.owner_id:
-        await interaction.response.send_message("❌ لا يمكن طرد صاحب البوت.")
-    else:
-        await member.kick(reason=reason)
-        await interaction.response.send_message(f"✅ تم طرد {member.mention} بنجاح. السبب: {reason}")
-
-@bot.tree.command(name="mute")
-@app_commands.checks.has_permissions(moderate_members=True)
-async def mute(interaction: discord.Interaction, member: discord.Member, duration: int, reason: str = "غير محدد"):
-    await member.edit(timeout_until=discord.utils.utcnow() + timedelta(minutes=duration))
-    await interaction.response.send_message(f"✅ تم إسكات {member.mention} لمدة {duration} دقيقة. السبب: {reason}")
-
-@bot.tree.command(name="warn")
-@app_commands.checks.has_permissions(kick_members=True)
-async def warn(interaction: discord.Interaction, member: discord.Member, reason: str = "غير محدد"):
-    await interaction.response.send_message(f"⚠️ {member.mention} تم تحذيره. السبب: {reason}")
-
-@bot.tree.command(name="purge")
-@app_commands.checks.has_permissions(manage_messages=True)
-async def purge(interaction: discord.Interaction, amount: int):
-    await interaction.channel.purge(limit=amount)
-    await interaction.response.send_message(f"✅ تم حذف {amount} رسالة بنجاح.", ephemeral=True)
-
-# نظام التيكت المتقدم
-@bot.tree.command(name="ticket")
-@app_commands.checks.has_permissions(manage_channels=True)
-async def ticket(interaction: discord.Interaction):
-    embed = discord.Embed(title="🎫 اختر نوع التيكت", description="اختر أحد الخيارات التالية:")
-    embed.add_field(name="1️⃣ طلب خدمة", value="لفتح تيكت لطلب خدمة جديدة.", inline=False)
-    embed.add_field(name="2️⃣ تجديد خدمة", value="لفتح تيكت لتجديد الخدمة.", inline=False)
-    embed.add_field(name="3️⃣ تساؤل", value="لفتح تيكت لطرح سؤال.", inline=False)
-
-    view = TicketSelectView()
-    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-
-class TicketSelectView(discord.ui.View):
-    @discord.ui.button(label="طلب خدمة", style=discord.ButtonStyle.primary)
-    async def service_request(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await create_ticket(interaction, "طلب خدمة")
-
-    @discord.ui.button(label="تجديد خدمة", style=discord.ButtonStyle.success)
-    async def service_renew(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await create_ticket(interaction, "تجديد خدمة")
-
-    @discord.ui.button(label="تساؤل", style=discord.ButtonStyle.secondary)
-    async def inquiry(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await create_ticket(interaction, "تساؤل")
-
-async def create_ticket(interaction, ticket_type):
-    category = discord.utils.get(interaction.guild.categories, name="Tickets")
-    if not category:
-        category = await interaction.guild.create_category("Tickets")
-
-    channel = await interaction.guild.create_text_channel(f"{ticket_type}-{interaction.user.name}", category=category)
-    await channel.send(f"**{interaction.user.mention}** فتح تيكت ({ticket_type}). انتظر أحد الإداريين.")
-    await interaction.response.send_message(f"تم فتح تيكت بنجاح: {channel.mention}", ephemeral=True)
-
-# نظام القيفواي الاحترافي
-@bot.tree.command(name="giveaway")
-@app_commands.checks.has_permissions(administrator=True)
-async def giveaway(interaction: discord.Interaction, duration: int, prize: str, winners: int = 1):
-    embed = discord.Embed(title="🎉 جائزة جديدة!", description=f"🏆 الجائزة: **{prize}**\n⌛ مدة السحب: {duration} دقيقة\n👥 عدد الفائزين: {winners}")
-    message = await interaction.channel.send(embed=embed)
-    await message.add_reaction("🎉")
-
-    await asyncio.sleep(duration * 60)
-
-    updated_msg = await interaction.channel.fetch_message(message.id)
-    users = [user async for user in updated_msg.reactions[0].users() if not user.bot]
-
-    if users:
-        winners_list = random.sample(users, min(winners, len(users)))
-        winner_mentions = ', '.join(winner.mention for winner in winners_list)
-        await interaction.channel.send(f"🎊 الفائزون هم: {winner_mentions}! مبروك! 🎉")
-    else:
-        await interaction.channel.send("❌ لا يوجد مشاركين في السحب.")
-
-# نظام إشعارات تلقائي
-@bot.tree.command(name="notify")
-@app_commands.checks.has_permissions(administrator=True)
-async def notify(interaction: discord.Interaction, message: str):
-    for channel in interaction.guild.text_channels:
-        await channel.send(f"🔔 إشعار: {message}")
-
-# نظام تسجيل الدخول والخروج
-@bot.tree.command(name="on_duty")
-@app_commands.checks.has_permissions(manage_roles=True)
-async def on_duty(interaction: discord.Interaction):
-    duty_list.append(interaction.user.id)
-    await interaction.response.send_message(f"✅ {interaction.user.mention} الآن في الخدمة.")
-
-@bot.tree.command(name="off_duty")
-@app_commands.checks.has_permissions(manage_roles=True)
-async def off_duty(interaction: discord.Interaction):
-    if interaction.user.id in duty_list:
-        duty_list.remove(interaction.user.id)
-    await interaction.response.send_message(f"❎ {interaction.user.mention} خرج من الخدمة.")
-
+# -------------------- حدث On Ready --------------------
 @bot.event
 async def on_ready():
-    await bot.tree.sync()
-    print(f"تم تسجيل الدخول باسم {bot.user}")
+    print(f'✅ {bot.user} متصل بنجاح!')
+    try:
+        synced = await bot.tree.sync()
+        print(f"✅ {len(synced)} أمر سلاش تم تسجيله بنجاح!")
+    except Exception as e:
+        print(f"❌ حدث خطأ أثناء تسجيل الأوامر: {e}")
+
+# -------------------- أمر Ping --------------------
+@bot.tree.command(name="ping", description="يظهر لك سرعة استجابة البوت")
+async def ping(interaction: discord.Interaction):
+    await interaction.response.send_message(f"Pong! 🏓 {round(bot.latency * 1000)}ms")
+
+# -------------------- أوامر الإدارة --------------------
+@bot.tree.command(name="ban", description="حظر عضو")
+@commands.has_permissions(ban_members=True)
+async def ban(interaction: discord.Interaction, member: discord.Member, reason: str = "لم يتم تحديد السبب"):
+    if member.id == OWNER_ID:
+        await interaction.response.send_message("❌ لا يمكنك حظر صاحب البوت!", ephemeral=True)
+        return
+    await member.ban(reason=reason)
+    await interaction.response.send_message(f"✅ {member.mention} تم حظره بنجاح!")
+
+@bot.tree.command(name="kick", description="طرد عضو")
+@commands.has_permissions(kick_members=True)
+async def kick(interaction: discord.Interaction, member: discord.Member, reason: str = "لم يتم تحديد السبب"):
+    if member.id == OWNER_ID:
+        await interaction.response.send_message("❌ لا يمكنك طرد صاحب البوت!", ephemeral=True)
+        return
+    await member.kick(reason=reason)
+    await interaction.response.send_message(f"✅ {member.mention} تم طرده بنجاح!")
+
+# -------------------- نظام تيكت متقدم --------------------
+@bot.tree.command(name="ticket", description="افتح تيكت جديد")
+async def ticket(interaction: discord.Interaction, نوع_الطلب: str):
+    channel = await interaction.guild.create_text_channel(f"🎫-{نوع_الطلب}-{interaction.user.name}")
+    await channel.send(f"📩 تم فتح التيكت بواسطة {interaction.user.mention}")
+    await interaction.response.send_message(f"✅ تم فتح تيكت جديد: {channel.mention}", ephemeral=True)
+
+# -------------------- نظام 'on duty' --------------------
+on_duty_admins = []
+
+@bot.tree.command(name="on_duty", description="حدد نفسك كإداري في الخدمة")
+async def on_duty(interaction: discord.Interaction):
+    if interaction.user.id not in on_duty_admins:
+        on_duty_admins.append(interaction.user.id)
+        await interaction.response.send_message(f"✅ {interaction.user.mention} الآن في الخدمة!", ephemeral=True)
+    else:
+        await interaction.response.send_message("❗ أنت بالفعل في الخدمة.", ephemeral=True)
+
+@bot.tree.command(name="off_duty", description="قم بإلغاء حالتك كإداري في الخدمة")
+async def off_duty(interaction: discord.Interaction):
+    if interaction.user.id in on_duty_admins:
+        on_duty_admins.remove(interaction.user.id)
+        await interaction.response.send_message(f"❌ {interaction.user.mention} خرج من الخدمة!", ephemeral=True)
+    else:
+        await interaction.response.send_message("❗ أنت لست في الخدمة.", ephemeral=True)
+
+# -------------------- نظام إشعارات تلقائي --------------------
+@bot.tree.command(name="announce", description="إرسال إعلان إلى قناة محددة")
+@commands.has_permissions(administrator=True)
+async def announce(interaction: discord.Interaction, channel: discord.TextChannel, *, message: str):
+    await channel.send(f"📢 **إعلان:** {message}")
+    await interaction.response.send_message("✅ تم إرسال الإعلان بنجاح!", ephemeral=True)
+
+# -------------------- نظام قيفواي احترافي --------------------
+@bot.tree.command(name="giveaway", description="إنشاء قيفواي جديد")
+@commands.has_permissions(administrator=True)
+async def giveaway(interaction: discord.Interaction, channel: discord.TextChannel, duration: int, prize: str):
+    embed = discord.Embed(title="🎉 قيفواي 🎉", description=f"الجائزة: {prize}\n⏳ ينتهي خلال {duration} دقيقة!", color=0x00ff00)
+    msg = await channel.send(embed=embed)
+    await msg.add_reaction("🎉")
+    await interaction.response.send_message(f"✅ تم بدء القيفواي في {channel.mention}!", ephemeral=True)
+
+    await asyncio.sleep(duration * 60)
+    msg = await channel.fetch_message(msg.id)
+    users = [user async for user in msg.reactions[0].users() if not user.bot]
+    if users:
+        winner = random.choice(users)
+        await channel.send(f"🎉 تهانينا! الفائز هو {winner.mention} 🎉")
+    else:
+        await channel.send("❗ لم يشارك أحد في القيفواي!")
+
+# -------------------- تشغيل البوت --------------------
 
 import os
 import discord
