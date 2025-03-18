@@ -1,8 +1,9 @@
 import discord
 from discord.ext import commands
+import os
 
 intents = discord.Intents.default()
-intents.message_content = True 
+intents.message_content = True  # تأكد من تفعيل هذا السطر
 intents.typing = False
 intents.presences = False
 intents.guilds = True
@@ -12,7 +13,7 @@ intents.members = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 OWNER_ID = 760949680355278848  # استبدل هذا بمعرفك الشخصي
-ALLOWED_ROLES = [1248376968643088485, 1236265862952915046]  # الأيدي الخاصة برولات الإدارة
+ALLOWED_ROLES = [1248376968643088485, 1236265862952915046]  # أيدي رولات الإدارة
 
 warnings = {}  # تخزين التحذيرات
 
@@ -106,5 +107,4 @@ async def purge(interaction: discord.Interaction, amount: int):
     await interaction.channel.purge(limit=amount + 1)
     await interaction.response.send_message(f"✅ تم حذف {amount} رسالة بنجاح!", ephemeral=True)
 
-import os
 bot.run(os.getenv("TOKEN"))
