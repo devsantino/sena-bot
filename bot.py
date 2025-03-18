@@ -11,7 +11,9 @@ intents.members = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 OWNER_ID = 760949680355278848  # استبدل هذا بمعرفك الشخصي
-ALLOWED_ROLES = [1248376968643088485 , 1236265862952915046]  # استبدل هذه بمعرفات الرتب المسموح لها باستخدام أوامر الإدارة
+ALLOWED_ROLES = [1248376968643088485, 1236265862952915046]  # الأيدي الخاصة برولات الإدارة
+
+warnings = {}  # تخزين التحذيرات
 
 @bot.event
 async def on_ready():
@@ -54,6 +56,54 @@ async def ban(interaction: discord.Interaction, member: discord.Member, reason: 
 
     await member.ban(reason=reason)
     await interaction.response.send_message(f"✅ {member.mention} تم حظره بنجاح!")
+
+@bot.tree.command(name="lock", description="قفل القناة الحالية")
+async def lock(interaction: discord.Interaction):
+    if not await has_allowed_role(interaction):
+        await interaction.response.send_message("❌ ليس لديك الصلاحية لاستخدام هذا الأمر.", ephemeral=True)
+        return
+
+    await interaction.channel.set_permissions(interaction.guild.default_role, send_messages=False)
+    await interaction.response.send_message("🔒 تم قفل القناة بنجاح!")
+
+@bot.tree.command(name="unlock", description="فتح القناة الحالية")
+async def unlock(interaction: discord.Interaction):
+    if not await has_allowed_role(interaction):
+        await interaction.response.send_message("❌ ليس لديك الصلاحية لاستخدام هذا الأمر.", ephemeral=True)
+        return
+
+    await interaction.channel.set_permissions(interaction.guild.default_role, send_messages=True)
+    await interaction.response.send_message("🔓 تم فتح القناة بنجاح!")
+
+@bot.tree.command(name="warn", description="تحذير عضو")
+async def warn(interaction: discord.Interaction, member: discord.Member, reason: str = "لم يتم تحديد السبب"):
+    if not await has_allowed_role(interaction):
+        await interaction.response.send_message("❌ ليس لديك الصلاحية لاستخدام هذا الأمر.", ephemeral=True)
+        return
+
+    if member.id not in warnings:
+        warnings[member.id] = []
+
+    warnings[member.id].append(reason)
+    await interaction.response.send_message(f"⚠️ {member.mention} تم تحذيره بنجاح! السبب: {reason}")
+
+@bot.tree.command(name="clearwarns", description="إزالة جميع تحذيرات عضو")
+async def clearwarns(interaction: discord.Interaction, member: discord.Member):
+    if not await has_allowed_role(interaction):
+        await interaction.response.send_message("❌ ليس لديك الصلاحية لاستخدام هذا الأمر.", ephemeral=True)
+        return
+
+    warnings[member.id] = []
+    await interaction.response.send_message(f"✅ تم مسح جميع تحذيرات {member.mention} بنجاح!")
+
+@bot.tree.command(name="purge", description="حذف عدد معين من الرسائل")
+async def purge(interaction: discord.Interaction, amount: int):
+    if not await has_allowed_role(interaction):
+        await interaction.response.send_message("❌ ليس لديك الصلاحية لاستخدام هذا الأمر.", ephemeral=True)
+        return
+
+    await interaction.channel.purge(limit=amount + 1)
+    await interaction.response.send_message(f"✅ تم حذف {amount} رسالة بنجاح!", ephemeral=True)
 
 import os
 bot.run(os.getenv("TOKEN"))
