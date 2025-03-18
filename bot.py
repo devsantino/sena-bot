@@ -1,6 +1,6 @@
 import discord
-from discord.ext import commands
 import os
+from discord.ext import commands
 
 intents = discord.Intents.default()
 intents.typing = False
@@ -15,13 +15,13 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 async def on_ready():
     print(f'✅ {bot.user} متصل بنجاح!')
     try:
-        synced = await bot.tree.sync()
-        print(f"✅ {len(synced)} أمر سلاش تم تسجيله بنجاح!")
+        await bot.tree.sync()
+        print("✅ تم مزامنة أوامر السلاش بنجاح!")
     except Exception as e:
-        print(f"❌ حدث خطأ أثناء تسجيل الأوامر: {e}")
+        print(f"❌ حدث خطأ أثناء مزامنة الأوامر: {e}")
 
 @bot.tree.command(name="ping", description="يظهر لك سرعة استجابة البوت")
 async def ping(interaction: discord.Interaction):
-    await interaction.response.send_message(f"Pong! 🏓 {round(bot.latency * 1000)}ms")
+    await interaction.response.send_message(f"Pong! 🏓 {round(bot.latency * 1000)}ms", ephemeral=True)
 
-bot.run(os.getenv("TOKEN"))
+bot.run(os.getenv("YOUR_BOT_TOKEN"))
