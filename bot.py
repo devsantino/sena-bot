@@ -2,6 +2,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 import asyncio
+import random
+import os
 
 intents = discord.Intents.default()
 intents.typing = False
@@ -11,7 +13,6 @@ intents.messages = True
 intents.members = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
-
 OWNER_ID = 760949680355278848  # استبدل هذا بمعرفك الشخصي
 
 # -------------------- حدث On Ready --------------------
@@ -19,85 +20,61 @@ OWNER_ID = 760949680355278848  # استبدل هذا بمعرفك الشخصي
 async def on_ready():
     print(f'✅ {bot.user} متصل بنجاح!')
     try:
-        synced = await bot.tree.sync()
-        print(f"✅ {len(synced)} أمر سلاش تم تسجيله بنجاح!")
+        await bot.tree.sync()
+        print("✅ تمت مزامنة أوامر السلاش بنجاح!")
     except Exception as e:
         print(f"❌ حدث خطأ أثناء تسجيل الأوامر: {e}")
 
 # -------------------- أمر Ping --------------------
 @bot.tree.command(name="ping", description="يظهر لك سرعة استجابة البوت")
-async def ping(interaction: discord.Interaction):
-    await interaction.response.send_message(f"Pong! 🏓 {round(bot.latency * 1000)}ms")
+@bot.command(name="ping")
+async def ping(ctx_or_interaction):
+    latency = round(bot.latency * 1000)
+    if isinstance(ctx_or_interaction, discord.Interaction):
+        await ctx_or_interaction.response.send_message(f"Pong! 🏓 {latency}ms")
+    else:
+        await ctx_or_interaction.send(f"Pong! 🏓 {latency}ms")
 
 # -------------------- أوامر الإدارة --------------------
 @bot.tree.command(name="ban", description="حظر عضو")
+@bot.command(name="ban")
 @commands.has_permissions(ban_members=True)
-async def ban(interaction: discord.Interaction, member: discord.Member, reason: str = "لم يتم تحديد السبب"):
+async def ban(ctx_or_interaction, member: discord.Member, *, reason: str = "لم يتم تحديد السبب"):
     if member.id == OWNER_ID:
-        await interaction.response.send_message("❌ لا يمكنك حظر صاحب البوت!", ephemeral=True)
+        await ctx_or_interaction.send("❌ لا يمكنك حظر صاحب البوت!")
         return
     await member.ban(reason=reason)
-    await interaction.response.send_message(f"✅ {member.mention} تم حظره بنجاح!")
+    await ctx_or_interaction.send(f"✅ {member.mention} تم حظره بنجاح!")
 
 @bot.tree.command(name="kick", description="طرد عضو")
+@bot.command(name="kick")
 @commands.has_permissions(kick_members=True)
-async def kick(interaction: discord.Interaction, member: discord.Member, reason: str = "لم يتم تحديد السبب"):
+async def kick(ctx_or_interaction, member: discord.Member, *, reason: str = "لم يتم تحديد السبب"):
     if member.id == OWNER_ID:
-        await interaction.response.send_message("❌ لا يمكنك طرد صاحب البوت!", ephemeral=True)
+        await ctx_or_interaction.send("❌ لا يمكنك طرد صاحب البوت!")
         return
     await member.kick(reason=reason)
-    await interaction.response.send_message(f"✅ {member.mention} تم طرده بنجاح!")
+    await ctx_or_interaction.send(f"✅ {member.mention} تم طرده بنجاح!")
 
-# -------------------- نظام تيكت متقدم --------------------
-@bot.tree.command(name="ticket", description="افتح تيكت جديد")
-async def ticket(interaction: discord.Interaction, نوع_الطلب: str):
-    channel = await interaction.guild.create_text_channel(f"🎫-{نوع_الطلب}-{interaction.user.name}")
-    await channel.send(f"📩 تم فتح التيكت بواسطة {interaction.user.mention}")
-    await interaction.response.send_message(f"✅ تم فتح تيكت جديد: {channel.mention}", ephemeral=True)
+# -------------------- نظام تيكت عبر زر --------------------
+class TicketView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
 
-# -------------------- نظام 'on duty' --------------------
-on_duty_admins = []
+    @discord.ui.button(label="افتح تيكت", style=discord.ButtonStyle.green)
+    async def create_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        channel = await interaction.guild.create_text_channel(f"🎫-تيكت-{interaction.user.name}")
+        await channel.send(f"📩 تم فتح التيكت بواسطة {interaction.user.mention}")
+        await interaction.response.send_message(f"✅ تم فتح تيكت جديد: {channel.mention}", ephemeral=True)
 
-@bot.tree.command(name="on_duty", description="حدد نفسك كإداري في الخدمة")
-async def on_duty(interaction: discord.Interaction):
-    if interaction.user.id not in on_duty_admins:
-        on_duty_admins.append(interaction.user.id)
-        await interaction.response.send_message(f"✅ {interaction.user.mention} الآن في الخدمة!", ephemeral=True)
+@bot.tree.command(name="ticket", description="عرض زر لإنشاء تيكت")
+@bot.command(name="ticket")
+async def ticket(ctx_or_interaction):
+    view = TicketView()
+    if isinstance(ctx_or_interaction, discord.Interaction):
+        await ctx_or_interaction.response.send_message("اضغط على الزر أدناه لفتح تيكت جديد.", view=view)
     else:
-        await interaction.response.send_message("❗ أنت بالفعل في الخدمة.", ephemeral=True)
-
-@bot.tree.command(name="off_duty", description="قم بإلغاء حالتك كإداري في الخدمة")
-async def off_duty(interaction: discord.Interaction):
-    if interaction.user.id in on_duty_admins:
-        on_duty_admins.remove(interaction.user.id)
-        await interaction.response.send_message(f"❌ {interaction.user.mention} خرج من الخدمة!", ephemeral=True)
-    else:
-        await interaction.response.send_message("❗ أنت لست في الخدمة.", ephemeral=True)
-
-# -------------------- نظام إشعارات تلقائي --------------------
-@bot.tree.command(name="announce", description="إرسال إعلان إلى قناة محددة")
-@commands.has_permissions(administrator=True)
-async def announce(interaction: discord.Interaction, channel: discord.TextChannel, *, message: str):
-    await channel.send(f"📢 **إعلان:** {message}")
-    await interaction.response.send_message("✅ تم إرسال الإعلان بنجاح!", ephemeral=True)
-
-# -------------------- نظام قيفواي احترافي --------------------
-@bot.tree.command(name="giveaway", description="إنشاء قيفواي جديد")
-@commands.has_permissions(administrator=True)
-async def giveaway(interaction: discord.Interaction, channel: discord.TextChannel, duration: int, prize: str):
-    embed = discord.Embed(title="🎉 قيفواي 🎉", description=f"الجائزة: {prize}\n⏳ ينتهي خلال {duration} دقيقة!", color=0x00ff00)
-    msg = await channel.send(embed=embed)
-    await msg.add_reaction("🎉")
-    await interaction.response.send_message(f"✅ تم بدء القيفواي في {channel.mention}!", ephemeral=True)
-
-    await asyncio.sleep(duration * 60)
-    msg = await channel.fetch_message(msg.id)
-    users = [user async for user in msg.reactions[0].users() if not user.bot]
-    if users:
-        winner = random.choice(users)
-        await channel.send(f"🎉 تهانينا! الفائز هو {winner.mention} 🎉")
-    else:
-        await channel.send("❗ لم يشارك أحد في القيفواي!")
+        await ctx_or_interaction.send("اضغط على الزر أدناه لفتح تيكت جديد.", view=view)
 
 # -------------------- تشغيل البوت --------------------
 
