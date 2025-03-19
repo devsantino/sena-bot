@@ -1,17 +1,24 @@
 import discord
 from discord.ext import commands
+from discord import app_commands
+import asyncio
+import random
+from datetime import datetime, timedelta
 import os
+from collections import defaultdict
 
+# إعدادات البوت
 intents = discord.Intents.default()
 intents.typing = False
 intents.presences = False
 intents.guilds = True
 intents.messages = True
-intents.members = True
-intents.message_content = True
+intents.members = True  # تفعيل لرؤية الأعضاء
+intents.message_content = True  # تفعيل لرؤية محتوى الرسائل
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
+# إعدادات الأدوار والإشعارات
 OWNER_ID = 760949680355278848  # استبدل هذا بمعرفك الشخصي
 ALLOWED_ROLES = [1248376968643088485, 1236265862952915046]  # استبدل هذه بالأيدي الخاصة برولات الإدارة
 notifications_channel_id = None  # سيتم تعيينه عبر أمر معين
@@ -22,9 +29,16 @@ WARNING_ROLES = {
     3: 1351706386362273923   # رول التحذير الثالث
 }
 
+# إعدادات نظام مكافحة السبام
+MESSAGE_LIMIT = 5  # الحد الأقصى لعدد الرسائل المسموح بها
+TIME_WINDOW = 10  # الفترة الزمنية بالثواني
+spam_tracker = defaultdict(list)  # لتتبع الرسائل المرسلة من قبل الأعضاء
+
+# وظيفة للتحقق من الصلاحيات
 async def has_allowed_role(interaction):
     return any(role.id in ALLOWED_ROLES for role in interaction.user.roles)
 
+# حدث عند اتصال البوت
 @bot.event
 async def on_ready():
     print(f'✅ {bot.user} متصل بنجاح!')
@@ -34,11 +48,11 @@ async def on_ready():
     except Exception as e:
         print(f"❌ حدث خطأ أثناء تسجيل الأوامر: {e}")
 
+# ---------------------------------- أوامر السلاش ----------------------------------
 @bot.tree.command(name="ping", description="يظهر لك سرعة استجابة البوت")
 async def ping(interaction: discord.Interaction):
     await interaction.response.send_message(f"Pong! 🏓 {round(bot.latency * 1000)}ms")
 
-# ----------------------------------system cmd------------------------------------------
 @bot.tree.command(name="kick", description="طرد عضو")
 async def kick(interaction: discord.Interaction, member: discord.Member, reason: str = "لم يتم تحديد السبب"):
     if not await has_allowed_role(interaction):
@@ -51,9 +65,12 @@ async def kick(interaction: discord.Interaction, member: discord.Member, reason:
 
     await member.kick(reason=reason)
     await interaction.response.send_message(f"✅ {member.mention} تم طرده بنجاح!")
-    if notifications_channel_id:
-        channel = bot.get_channel(notifications_channel_id)
-        await channel.send(f"🚨 {member.mention} تم طرده بواسطة {interaction.user.mention} | السبب: {reason}")
+    await send_notification(
+        f"🚨 **تم طرد عضو**\n"
+        f"👤 العضو: {member.mention}\n"
+        f"👤 تم الطرد بواسطة: {interaction.user.mention}\n"
+        f"📝 السبب: {reason}"
+    )
 
 @bot.tree.command(name="ban", description="حظر عضو")
 async def ban(interaction: discord.Interaction, member: discord.Member, reason: str = "لم يتم تحديد السبب"):
@@ -67,9 +84,12 @@ async def ban(interaction: discord.Interaction, member: discord.Member, reason: 
 
     await member.ban(reason=reason)
     await interaction.response.send_message(f"✅ {member.mention} تم حظره بنجاح!")
-    if notifications_channel_id:
-        channel = bot.get_channel(notifications_channel_id)
-        await channel.send(f"🚨 {member.mention} تم حظره بواسطة {interaction.user.mention} | السبب: {reason}")
+    await send_notification(
+        f"🚨 **تم حظر عضو**\n"
+        f"👤 العضو: {member.mention}\n"
+        f"👤 تم الحظر بواسطة: {interaction.user.mention}\n"
+        f"📝 السبب: {reason}"
+    )
 
 @bot.tree.command(name="lock", description="قفل القناة الحالية")
 async def lock(interaction: discord.Interaction):
@@ -113,9 +133,12 @@ async def warn(interaction: discord.Interaction, member: discord.Member, reason:
             await member.add_roles(role)
             await member.send(f"⚠️ لقد تلقيت تحذيرًا في سيرفر {interaction.guild.name} بسبب: {reason}")
             await interaction.response.send_message(f"⚠️ {member.mention} تم تحذيره بنجاح! السبب: {reason}")
-            if notifications_channel_id:
-                channel = bot.get_channel(notifications_channel_id)
-                await channel.send(f"⚠️ {member.mention} تم تحذيره بواسطة {interaction.user.mention} | السبب: {reason}")
+            await send_notification(
+                f"⚠️ **تم تحذير عضو**\n"
+                f"👤 العضو: {member.mention}\n"
+                f"👤 تم التحذير بواسطة: {interaction.user.mention}\n"
+                f"📝 السبب: {reason}"
+            )
             return
 
     await interaction.response.send_message(f"❌ {member.mention} لديه بالفعل الحد الأقصى من التحذيرات!", ephemeral=True)
@@ -131,11 +154,15 @@ async def unwarn(interaction: discord.Interaction, member: discord.Member):
         if role in member.roles:
             await member.remove_roles(role)
             await interaction.response.send_message(f"✅ تمت إزالة تحذير من {member.mention} بنجاح!")
+            await send_notification(
+                f"✅ **تمت إزالة تحذير من عضو**\n"
+                f"👤 العضو: {member.mention}\n"
+                f"👤 تمت الإزالة بواسطة: {interaction.user.mention}"
+            )
             return
 
     await interaction.response.send_message(f"❌ {member.mention} ليس لديه أي تحذيرات لإزالتها!", ephemeral=True)
 
-# -------------------------------------------------- sup cmd -----------------------------------------------------------------------------
 @bot.tree.command(name="on_duty", description="عرض الإداريين المتاحين")
 async def on_duty(interaction: discord.Interaction):
     duty_staff = [member.mention for member in interaction.guild.members if any(role.id in ALLOWED_ROLES for role in member.roles)]
@@ -148,7 +175,11 @@ async def on_duty(interaction: discord.Interaction):
 async def say(interaction: discord.Interaction, *, message: str):
     await interaction.channel.send(message)
     await interaction.response.send_message("✅ تم إرسال الرسالة بنجاح!", ephemeral=True)
-    await send_notification(f"🗣️ {interaction.user.mention} استخدم أمر SAY: {message}")
+    await send_notification(
+        f"🗣️ **تم استخدام أمر SAY**\n"
+        f"👤 المستخدم: {interaction.user.mention}\n"
+        f"📝 الرسالة: {message}"
+    )
 
 @bot.tree.command(name="setnotifications", description="تحديد روم الإشعارات التلقائية")
 async def set_notifications(interaction: discord.Interaction, channel: discord.TextChannel):
@@ -160,30 +191,151 @@ async def set_notifications(interaction: discord.Interaction, channel: discord.T
     notifications_channel_id = channel.id
     await interaction.response.send_message(f"✅ تم تعيين روم الإشعارات إلى {channel.mention}")
 
-async def send_notification(message):
-    if notifications_channel_id:
-        channel = bot.get_channel(notifications_channel_id)
-        if channel:
-            embed = discord.Embed(title="إشعار تلقائي", description=message, color=discord.Color.blue())
-            await channel.send(embed=embed)
+# ---------------------------------- إشعارات الرسائل والأعضاء ----------------------------------
+@bot.event
+async def on_message_delete(message):
+    if notifications_channel_id and not message.author.bot:
+        embed = discord.Embed(
+            title="🗑️ **تم حذف رسالة**",
+            description=f"📝 الرسالة: {message.content}\n"
+                        f"👤 العضو: {message.author.mention}\n"
+                        f"📌 القناة: {message.channel.mention}",
+            color=discord.Color.red()
+        )
+        await send_notification(embed=embed)
 
 @bot.event
-async def on_member_join(member):
-    if notifications_channel_id:
-        channel = bot.get_channel(notifications_channel_id)
-        await channel.send(f"✅ عضو جديد انضم للسيرفر: {member.mention}")
+async def on_message_edit(before, after):
+    if notifications_channel_id and not before.author.bot and before.content != after.content:
+        embed = discord.Embed(
+            title="📝 **تم تعديل رسالة**",
+            description=f"👤 العضو: {before.author.mention}\n"
+                        f"📌 القناة: {before.channel.mention}\n"
+                        f"**قبل:** {before.content}\n"
+                        f"**بعد:** {after.content}",
+            color=discord.Color.blue()
+        )
+        await send_notification(embed=embed)
 
 @bot.event
 async def on_member_remove(member):
     if notifications_channel_id:
-        channel = bot.get_channel(notifications_channel_id)
-        await channel.send(f"❌ {member.mention} غادر السيرفر")
+        embed = discord.Embed(
+            title="🚪 **عضو غادر السيرفر**",
+            description=f"👤 العضو: {member.mention}\n"
+                        f"🕒 تاريخ الانضمام: {member.joined_at.strftime('%Y-%m-%d %H:%M:%S')}",
+            color=discord.Color.orange()
+        )
+        await send_notification(embed=embed)
 
+# ---------------------------------- نظام مكافحة السبام ----------------------------------
 @bot.event
-async def on_message_edit(before, after):
-    if notifications_channel_id and before.content != after.content:
-        channel = bot.get_channel(notifications_channel_id)
-        await channel.send(f"📝 تم تعديل رسالة في {before.channel.mention} من {before.author.mention}\n**قبل:** {before.content}\n**بعد:** {after.content}")
+async def on_message(message):
+    if message.author.bot:  # تجاهل رسائل البوت
+        return
 
-# -----------------------------------------------------end----------------------------------------------
+    # تحديث قائمة الرسائل للعضو
+    spam_tracker[message.author.id].append(datetime.now())
+
+    # إزالة الرسائل القديمة خارج النافذة الزمنية
+    spam_tracker[message.author.id] = [
+        msg_time for msg_time in spam_tracker[message.author.id]
+        if (datetime.now() - msg_time).seconds <= TIME_WINDOW
+    ]
+
+    # التحقق من تجاوز الحد المسموح به
+    if len(spam_tracker[message.author.id]) > MESSAGE_LIMIT:
+        await send_notification(
+            f"🚨 **تم اكتشاف سبام**\n"
+            f"👤 العضو: {message.author.mention}\n"
+            f"📌 القناة: {message.channel.mention}\n"
+            f"📝 عدد الرسائل: {len(spam_tracker[message.author.id])} في {TIME_WINDOW} ثواني"
+        )
+        # إعادة تعيين القائمة لمنع تكرار الإشعارات
+        spam_tracker[message.author.id] = []
+
+# وظيفة لإرسال الإشعارات
+async def send_notification(content=None, embed=None):
+    if notifications_channel_id:
+        channel = bot.get_channel(notifications_channel_id)
+        if channel:
+            if embed:
+                await channel.send(embed=embed)
+            elif content:
+                await channel.send(content)
+
+# ---------------------------------- فئة القيف أواي ----------------------------------
+class Giveaway(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.active_giveaways = []
+
+    @app_commands.command(name="giveaway", description="بدء قيف أواي جديد")
+    @app_commands.describe(
+        duration="مدة القيف أواي بالدقائق",
+        winners="عدد الفائزين",
+        prize="الجائزة"
+    )
+    async def giveaway(self, interaction: discord.Interaction, duration: int, winners: int, prize: str):
+        if duration <= 0 or winners <= 0:
+            await interaction.response.send_message("❌ مدة أو عدد فائزين غير صالح! تأكد من إدخال أرقام صحيحة.", ephemeral=True)
+            return
+
+        # إنشاء رسالة القيف أواي
+        embed = discord.Embed(
+            title="🎉 **قيف أواي** 🎉",
+            description=f"🏆 الجائزة: **{prize}**\n⏳ المدة: **{duration} دقيقة**\n👥 عدد الفائزين: **{winners}**",
+            color=discord.Color.gold(),
+            timestamp=datetime.utcnow() + timedelta(minutes=duration))
+        embed.set_footer(text="تفاعل مع 🎯 للمشاركة!")
+
+        await interaction.response.send_message(embed=embed)
+        message = await interaction.original_response()
+        await message.add_reaction("🎯")
+
+        # إضافة القيف أواي إلى القائمة النشطة
+        self.active_giveaways.append((message.id, winners, prize))
+
+        # الانتظار حتى انتهاء المدة
+        await asyncio.sleep(duration * 60)
+
+        # جلب الرسالة مرة أخرى بعد انتهاء المدة
+        message = await interaction.channel.fetch_message(message.id)
+        reaction = discord.utils.get(message.reactions, emoji="🎯")
+
+        if reaction and reaction.count > 1:  # يتجاهل البوت نفسه
+            participants = [user async for user in reaction.users() if not user.bot]
+            if len(participants) < winners:
+                await interaction.followup.send("❌ عدد المشاركين أقل من عدد الفائزين! القيف أواي أُلغي تلقائيًا.")
+                return
+
+            # اختيار الفائزين
+            winners_list = random.sample(participants, winners)
+            winners_mentions = ', '.join(winner.mention for winner in winners_list)
+            await interaction.followup.send(f"🎉 تهانينا! الفائزون هم: {winners_mentions} وفازوا بجائزة: **{prize}**")
+        else:
+            await interaction.followup.send("❌ لم يتفاعل أحد مع القيف أواي! تم الإلغاء تلقائيًا.")
+
+    @app_commands.command(name="cancel_giveaway", description="إلغاء قيف أواي محدد")
+    @app_commands.describe(message_id="معرف رسالة القيف أواي")
+    async def cancel_giveaway(self, interaction: discord.Interaction, message_id: str):
+        try:
+            message_id = int(message_id)
+        except ValueError:
+            await interaction.response.send_message("❌ معرف الرسالة غير صالح! يرجى إدخال رقم صحيح.", ephemeral=True)
+            return
+
+        for giveaway in self.active_giveaways:
+            if giveaway[0] == message_id:
+                self.active_giveaways.remove(giveaway)
+                await interaction.response.send_message("❌ تم إلغاء القيف أواي بنجاح.", ephemeral=True)
+                return
+
+        await interaction.response.send_message("❌ لم يتم العثور على القيف أواي المحدد.", ephemeral=True)
+
+# إضافة فئة القيف أواي إلى البوت
+async def setup(bot):
+    await bot.add_cog(Giveaway(bot))
+
+# تشغيل البوت
 bot.run(os.getenv("TOKEN"))
