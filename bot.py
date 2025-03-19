@@ -7,19 +7,11 @@ intents.presences = False
 intents.guilds = True
 intents.messages = True
 intents.members = True
-intents.message_content = True  # إضافة هذا السطر مهم
-
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-OWNER_ID = 760949680355278848  # استبدل هذا بمعرفك الشخصي
-ALLOWED_ROLES = [1248376968643088485, 1236265862952915046]  # استبدل هذه بالأيدي الخاصة برولات الإدارة
-
-WARNING_ROLES = {
-    1: 1351706303894130759,  # رول التحذير الأول
-    2: 1351706353567010898,  # رول التحذير الثاني
-    3: 1351706386362273923   # رول التحذير الثالث
-}
+OWNER_ID = 760949680355278848
+ALLOWED_ROLES = [1248376968643088485, 1236265862952915046]
 
 @bot.event
 async def on_ready():
@@ -30,12 +22,12 @@ async def on_ready():
     except Exception as e:
         print(f"❌ حدث خطأ أثناء تسجيل الأوامر: {e}")
 
+async def has_allowed_role(interaction):
+    return any(role.id in ALLOWED_ROLES for role in interaction.user.roles)
+
 @bot.tree.command(name="ping", description="يظهر لك سرعة استجابة البوت")
 async def ping(interaction: discord.Interaction):
     await interaction.response.send_message(f"Pong! 🏓 {round(bot.latency * 1000)}ms")
-
-async def has_allowed_role(interaction):
-    return any(role.id in ALLOWED_ROLES for role in interaction.user.roles)
 
 @bot.tree.command(name="kick", description="طرد عضو")
 async def kick(interaction: discord.Interaction, member: discord.Member, reason: str = "لم يتم تحديد السبب"):
@@ -69,7 +61,14 @@ async def lock(interaction: discord.Interaction):
         await interaction.response.send_message("❌ ليس لديك الصلاحية لاستخدام هذا الأمر.", ephemeral=True)
         return
 
-    await interaction.channel.set_permissions(interaction.guild.default_role, send_messages=False)
+    await interaction.channel.set_permissions(interaction.guild.default_role,
+                                               send_messages=False,
+                                               create_public_threads=False,
+                                               create_private_threads=False,
+                                               embed_links=False,
+                                               attach_files=False,
+                                               use_application_commands=False,
+                                               create_polls=False)
     await interaction.response.send_message("🔒 تم قفل القناة بنجاح!")
 
 @bot.tree.command(name="unlock", description="فتح القناة الحالية")
@@ -87,26 +86,49 @@ async def warn(interaction: discord.Interaction, member: discord.Member, reason:
         await interaction.response.send_message("❌ ليس لديك الصلاحية لاستخدام هذا الأمر.", ephemeral=True)
         return
 
-    for level, role_id in WARNING_ROLES.items():
-        role = interaction.guild.get_role(role_id)
-        if role not in member.roles:
-            await member.add_roles(role)
-            await member.send(f"⚠️ لقد تلقيت إنذار رقم {level} بسبب: {reason}")
-            await interaction.response.send_message(f"⚠️ {member.mention} تم تحذيره بنجاح! السبب: {reason}")
-            return
+    warning_roles = [role for role in member.roles if role.name.startswith("تحذير")]
 
-    await interaction.response.send_message(f"❗ {member.mention} لديه بالفعل أقصى عدد من التحذيرات!", ephemeral=True)
+    if len(warning_roles) >= 3:
+        await interaction.response.send_message(f"⚠️ {member.mention} لديه بالفعل 3 تحذيرات.")
+        return
 
-@bot.tree.command(name="purge", description="حذف عدد معين من الرسائل")
-async def purge(interaction: discord.Interaction, amount: int):
+    warn_role = discord.utils.get(interaction.guild.roles, name=f"تحذير {len(warning_roles) + 1}")
+    if warn_role:
+        await member.add_roles(warn_role)
+        await member.send(f"⚠️ لقد تلقيت تحذيرًا في السيرفر {interaction.guild.name} بسبب: {reason}")
+        await interaction.response.send_message(f"✅ {member.mention} تم تحذيره بنجاح! السبب: {reason}")
+    else:
+        await interaction.response.send_message("❌ لم يتم العثور على أدوار التحذير. تأكد من إضافتها في السيرفر.")
+
+@bot.tree.command(name="unwarn", description="إزالة تحذير من عضو")
+async def unwarn(interaction: discord.Interaction, member: discord.Member):
     if not await has_allowed_role(interaction):
         await interaction.response.send_message("❌ ليس لديك الصلاحية لاستخدام هذا الأمر.", ephemeral=True)
         return
 
-    await interaction.response.defer(ephemeral=True)  # تأجيل الرد أثناء تنفيذ الأمر
-    deleted = await interaction.channel.purge(limit=amount + 1)
-    await interaction.followup.send(f"✅ تم حذف {len(deleted) - 1} رسالة بنجاح!", ephemeral=True)
+    warning_roles = [role for role in member.roles if role.name.startswith("تحذير")]
+    if warning_roles:
+        await member.remove_roles(warning_roles[0])
+        await interaction.response.send_message(f"✅ تم إزالة تحذير واحد من {member.mention} بنجاح!")
+    else:
+        await interaction.response.send_message(f"❌ {member.mention} ليس لديه أي تحذيرات.")
 
+@bot.tree.command(name="say", description="إرسال رسالة عبر البوت")
+async def say(interaction: discord.Interaction, message: str):
+    if not await has_allowed_role(interaction):
+        await interaction.response.send_message("❌ ليس لديك الصلاحية لاستخدام هذا الأمر.", ephemeral=True)
+        return
+
+    await interaction.channel.send(message)
+    await interaction.response.send_message("✅ تم إرسال الرسالة بنجاح!", ephemeral=True)
+
+@bot.tree.command(name="on_duty", description="عرض قائمة بالإداريين المتاحين")
+async def on_duty(interaction: discord.Interaction):
+    admins = [member.mention for member in interaction.guild.members if any(role.id in ALLOWED_ROLES for role in member.roles)]
+    if admins:
+        await interaction.response.send_message(f"👨‍💼 الإداريون المتاحون حاليًا: {', '.join(admins)}")
+    else:
+        await interaction.response.send_message("❌ لا يوجد إداريون متاحون حاليًا.")
 
 import os
 bot.run(os.getenv("TOKEN"))
