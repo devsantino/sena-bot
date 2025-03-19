@@ -116,7 +116,7 @@ async def warn(interaction: discord.Interaction, member: discord.Member, reason:
             await interaction.response.send_message(f"⚠️ {member.mention} تم تحذيره بنجاح! السبب: {reason}")
             return
             
-  if NOTIFICATION_CHANNEL:
+if NOTIFICATION_CHANNEL:
         channel = bot.get_channel(NOTIFICATION_CHANNEL)
         await channel.send(f"⚠️ {member.mention} تم تحذيره بواسطة {interaction.user.mention} | السبب: {reason}")
       
