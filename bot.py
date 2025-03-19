@@ -7,6 +7,8 @@ intents.presences = False
 intents.guilds = True
 intents.messages = True
 intents.members = True
+intents.message_content = True  # إضافة هذا السطر مهم
+
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 
