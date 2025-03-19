@@ -329,6 +329,7 @@ class Giveaway(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(Giveaway(bot))
+
 # تشغيل البوت
 bot.run(os.getenv("TOKEN"))
         
