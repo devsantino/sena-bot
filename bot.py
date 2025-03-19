@@ -265,6 +265,49 @@ async def send_notification(content=None, embed=None):
                 await channel.send(content)
 
 # ---------------------------------- فئة القيف أواي ----------------------------------
+class GiveawayView(ui.View):
+    def __init__(self, duration: int, winners: int, prize: str):
+        super().__init__(timeout=None)
+        self.duration = duration
+        self.winners = winners
+        self.prize = prize
+        self.participants = []
+
+    @ui.button(label="🎊 Participate", style=discord.ButtonStyle.green)
+    async def participate(self, interaction: discord.Interaction, button: ui.Button):
+        if interaction.user not in self.participants:
+            self.participants.append(interaction.user)
+            await interaction.response.send_message("✅ You have successfully participated in the giveaway!", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ You have already participated in this giveaway!", ephemeral=True)
+
+    @ui.button(label="👥 Participants", style=discord.ButtonStyle.blurple)
+    async def show_participants(self, interaction: discord.Interaction, button: ui.Button):
+        participants_list = "\n".join([user.mention for user in self.participants])
+        await interaction.response.send_message(f"👥 **Participants:**\n{participants_list}", ephemeral=True)
+
+class CancelGiveawayView(ui.View):
+    def __init__(self, giveaways: list):
+        super().__init__()
+        self.giveaways = giveaways
+        self.add_item(GiveawayDropdown(giveaways))
+
+class GiveawayDropdown(ui.Select):
+    def __init__(self, giveaways: list):
+        options = [
+            discord.SelectOption(label=f"Giveaway: {giveaway[2]}", value=str(giveaway[0]))
+            for giveaway in giveaways
+        ]
+        super().__init__(placeholder="Select the giveaway to cancel", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        selected_id = int(self.values[0])
+        for giveaway in self.view.giveaways:
+            if giveaway[0] == selected_id:
+                self.view.giveaways.remove(giveaway)
+                await interaction.response.send_message(f"✅ Giveaway canceled: **{giveaway[2]}**", ephemeral=True)
+                return
+
 class Giveaway(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -297,7 +340,7 @@ class Giveaway(commands.Cog):
         embed = discord.Embed(
             title=f"{gift_emoji} **GIVEAWAY** {gift_emoji}",
             description=f"{gift_emoji} **Prize:** {prize}\n{time_emoji} **Duration:** {self.format_duration(duration_seconds)}\n{crown_emoji} **Winners:** {winners}",
-            color=discord.Color.purple(),  # لون أرجواني لتتناسب مع الإيموجيات
+            color=discord.Color.purple(),
             timestamp=datetime.utcnow() + timedelta(seconds=duration_seconds)
         )
         embed.set_footer(text="React below to participate!")
@@ -330,6 +373,52 @@ class Giveaway(commands.Cog):
             await interaction.followup.send(f"{gift_emoji} Congratulations! The winners are: {winners_mentions} and they won: **{prize}**")
         else:
             await interaction.followup.send("❌ No one participated in the giveaway! It has been canceled.")
+
+    def parse_duration(self, duration: str) -> int:
+        """
+        تحويل المدة من نص (مثل 5m, 2h, 1d) إلى ثواني.
+        """
+        if duration.endswith("m"):
+            return int(duration[:-1]) * 60
+        elif duration.endswith("h"):
+            return int(duration[:-1]) * 3600
+        elif duration.endswith("d"):
+            return int(duration[:-1]) * 86400
+        else:
+            raise ValueError("Invalid duration format! Use `5m` for minutes, `2h` for hours, or `1d` for days.")
+
+    def format_duration(self, duration: int) -> str:
+        """
+        تحويل المدة من ثواني إلى تنسيق مقروء (مثل 5 دقائق، 2 ساعات، 1 يوم).
+        """
+        if duration < 60:
+            return f"{duration} seconds"
+        elif duration < 3600:
+            return f"{duration // 60} minutes"
+        elif duration < 86400:
+            return f"{duration // 3600} hours"
+        else:
+            return f"{duration // 86400} days"
+
+    @app_commands.command(name="cancel_giveaway", description="Cancel a specific giveaway")
+    async def cancel_giveaway(self, interaction: discord.Interaction):
+        if not self.active_giveaways:
+            await interaction.response.send_message("❌ No active giveaways found.", ephemeral=True)
+            return
+
+        view = CancelGiveawayView(self.active_giveaways.copy())
+        await interaction.response.send_message("Select the giveaway to cancel:", view=view, ephemeral=True)
+
+# تحميل فئة القيف أواي عند تشغيل البوت
+@bot.event
+async def on_ready():
+    await bot.add_cog(Giveaway(bot))
+    print(f'✅ {bot.user} is ready!')
+    try:
+        synced = await bot.tree.sync()
+        print(f"✅ {len(synced)} slash commands synced successfully!")
+    except Exception as e:
+        print(f"❌ Error syncing commands: {e}")
 
 # تشغيل البوت
 bot.run(os.getenv("TOKEN"))
