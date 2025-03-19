@@ -333,9 +333,16 @@ class Giveaway(commands.Cog):
 
         await interaction.response.send_message("❌ لم يتم العثور على القيف أواي المحدد.", ephemeral=True)
 
-# إضافة فئة القيف أواي إلى البوت
-async def setup(bot):
+# تحميل فئة القيف أواي عند تشغيل البوت
+@bot.event
+async def on_ready():
     await bot.add_cog(Giveaway(bot))
+    print(f'✅ {bot.user} متصل بنجاح!')
+    try:
+        synced = await bot.tree.sync()
+        print(f"✅ {len(synced)} أمر سلاش تم تسجيله بنجاح!")
+    except Exception as e:
+        print(f"❌ حدث خطأ أثناء تسجيل الأوامر: {e}")
 
 # تشغيل البوت
 bot.run(os.getenv("TOKEN"))
