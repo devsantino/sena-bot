@@ -123,5 +123,19 @@ async def unwarn(interaction: discord.Interaction, member: discord.Member):
 
     await interaction.response.send_message(f"❌ {member.mention} ليس لديه أي تحذيرات لإزالتها!", ephemeral=True)
 
+@bot.tree.command(name="on_duty", description="عرض الإداريين المتاحين")
+async def on_duty(interaction: discord.Interaction):
+    duty_staff = [member.mention for member in interaction.guild.members if any(role.id in ALLOWED_ROLES for role in member.roles)]
+    if duty_staff:
+        await interaction.response.send_message(f"🟢 الإداريون المتاحون حالياً:\n{', '.join(duty_staff)}")
+    else:
+        await interaction.response.send_message("❌ لا يوجد إداريون متاحون حالياً.")
+
+@bot.tree.command(name="say", description="يجعل البوت يكرر رسالة معينة")
+async def say(interaction: discord.Interaction, *, message: str):
+    await interaction.channel.send(message)
+    await interaction.response.send_message("✅ تم إرسال الرسالة بنجاح!", ephemeral=True)
+
+
 import os
 bot.run(os.getenv("TOKEN"))
