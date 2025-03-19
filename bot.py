@@ -103,8 +103,10 @@ async def purge(interaction: discord.Interaction, amount: int):
         await interaction.response.send_message("❌ ليس لديك الصلاحية لاستخدام هذا الأمر.", ephemeral=True)
         return
 
-    await interaction.channel.purge(limit=amount + 1)
-    await interaction.response.send_message(f"✅ تم حذف {amount} رسالة بنجاح!", ephemeral=True)
+    await interaction.response.defer(ephemeral=True)  # تأجيل الرد أثناء تنفيذ الأمر
+    deleted = await interaction.channel.purge(limit=amount + 1)
+    await interaction.followup.send(f"✅ تم حذف {len(deleted) - 1} رسالة بنجاح!", ephemeral=True)
+
 
 import os
 bot.run(os.getenv("TOKEN"))
