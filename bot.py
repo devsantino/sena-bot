@@ -265,70 +265,155 @@ async def send_notification(content=None, embed=None):
                 await channel.send(content)
 
 # ---------------------------------- فئة القيف أواي ----------------------------------
-class GiveawayView(View):
-    def __init__(self, timeout=180):
-        super().__init__(timeout=timeout)
+class GiveawayView(ui.View):
+    def __init__(self, duration: int, winners: int, prize: str):
+        super().__init__(timeout=None)
+        self.duration = duration
+        self.winners = winners
+        self.prize = prize
         self.participants = []
 
-    @discord.ui.button(label="مشاركة", style=ButtonStyle.green)
-    async def join_giveaway(self, interaction: discord.Interaction, button: Button):
-        if interaction.user.id not in self.participants:
-            self.participants.append(interaction.user.id)
-            await interaction.response.send_message(f"✅ {interaction.user.mention} تم تسجيلك في القيف أواي!", ephemeral=True)
+    @ui.button(label="🎊 Participate", style=discord.ButtonStyle.green)
+    async def participate(self, interaction: discord.Interaction, button: ui.Button):
+        if interaction.user not in self.participants:
+            self.participants.append(interaction.user)
+            await interaction.response.send_message("✅ You have successfully participated in the giveaway!", ephemeral=True)
         else:
-            await interaction.response.send_message("⚠️ أنت مسجل بالفعل في القيف أواي!", ephemeral=True)
+            await interaction.response.send_message("❌ You have already participated in this giveaway!", ephemeral=True)
 
-    @discord.ui.button(label="رؤية المشاركين", style=ButtonStyle.blurple)
-    async def view_participants(self, interaction: discord.Interaction, button: Button):
-        if self.participants:
-            participant_list = '\n'.join([f"<@{user_id}>" for user_id in self.participants])
-            embed = discord.Embed(title="قائمة المشاركين", description=participant_list, color=discord.Color.green())
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-        else:
-            await interaction.response.send_message("🚫 لا يوجد مشاركين حتى الآن!", ephemeral=True)
+    @ui.button(label="👥 Participants", style=discord.ButtonStyle.blurple)
+    async def show_participants(self, interaction: discord.Interaction, button: ui.Button):
+        participants_list = "\n".join([user.mention for user in self.participants])
+        await interaction.response.send_message(f"👥 **Participants:**\n{participants_list}", ephemeral=True)
 
-    @discord.ui.button(label="إلغاء القيف أواي", style=ButtonStyle.red)
-    async def cancel_giveaway(self, interaction: discord.Interaction, button: Button):
-        if any(role.name in ALLOWED_ROLES for role in interaction.user.roles):
-            confirm_view = ConfirmCancelView(self)
-            await interaction.response.send_message("⚠️ هل أنت متأكد أنك تريد إلغاء القيف أواي؟", view=confirm_view, ephemeral=True)
-        else:
-            await interaction.response.send_message("🚫 ليس لديك الصلاحيات للقيام بذلك!", ephemeral=True)
+class CancelGiveawayView(ui.View):
+    def __init__(self, giveaways: list):
+        super().__init__()
+        self.giveaways = giveaways
+        self.add_item(GiveawayDropdown(giveaways))
 
-class ConfirmCancelView(View):
-    def __init__(self, giveaway_view):
-        super().__init__(timeout=60)
-        self.giveaway_view = giveaway_view
+class GiveawayDropdown(ui.Select):
+    def __init__(self, giveaways: list):
+        options = [
+            discord.SelectOption(label=f"Giveaway: {giveaway[2]}", value=str(giveaway[0]))
+            for giveaway in giveaways
+        ]
+        super().__init__(placeholder="اختر القيف أواي المراد إلغاؤه", options=options)
 
-    @discord.ui.button(label="تأكيد", style=ButtonStyle.green)
-    async def confirm(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.send_message("✅ تم إلغاء القيف أواي بنجاح!", ephemeral=True)
-        await interaction.message.delete()
-
-    @discord.ui.button(label="إلغاء", style=ButtonStyle.red)
-    async def cancel(self, interaction: discord.Interaction, button: Button):
-        await interaction.response.send_message("❌ تم إلغاء عملية الإلغاء!", ephemeral=True)
-        await interaction.message.delete()
+    async def callback(self, interaction: discord.Interaction):
+        selected_id = int(self.values[0])
+        for giveaway in self.view.giveaways:
+            if giveaway[0] == selected_id:
+                self.view.giveaways.remove(giveaway)
+                await interaction.response.send_message(f"✅ تم إلغاء القيف أواي: **{giveaway[2]}** بنجاح!", ephemeral=True)
+                return
 
 class Giveaway(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.active_giveaways = []
 
-    @commands.command()
-    async def giveaway(self, ctx, prize: str, duration: int):
-        embed = discord.Embed(title="🎉 قيف أواي 🎉", description=f"الجائزة: **{prize}**\n⏳ المدة: **{duration} ثانية**", color=discord.Color.gold())
-        view = GiveawayView(timeout=duration)
-        message = await ctx.send(embed=embed, view=view)
+    @app_commands.command(name="giveaway", description="بدء قيف أواي جديد")
+    @app_commands.describe(
+        duration="مدة القيف أواي (مثال: 5m, 2h, 1d)",
+        winners="عدد الفائزين",
+        prize="الجائزة"
+    )
+    async def giveaway(self, interaction: discord.Interaction, duration: str, winners: int, prize: str):
+        # تحويل المدة إلى ثواني
+        try:
+            duration_seconds = self.parse_duration(duration)
+        except ValueError as e:
+            await interaction.response.send_message(f"❌ {e}", ephemeral=True)
+            return
 
-        await asyncio.sleep(duration)
-        if view.participants:
-            winner = random.choice(view.participants)
-            await ctx.send(f"🎊 تهانينا! الفائز هو <@{winner}> بجائزة **{prize}**!")
+        if duration_seconds <= 0 or winners <= 0:
+            await interaction.response.send_message("❌ مدة أو عدد فائزين غير صالح! تأكد من إدخال أرقام صحيحة.", ephemeral=True)
+            return
+
+        # إنشاء رسالة القيف أواي
+        embed = discord.Embed(
+            title="🎉 **GIVEAWAY** 🎉",
+            description=f"🎁 **Prize:** {prize}\n⏳ **Duration:** {self.format_duration(duration_seconds)}\n👑 **Winners:** {winners}",
+            color=discord.Color.gold(),
+            timestamp=datetime.utcnow() + timedelta(seconds=duration_seconds))
+        embed.set_footer(text="تفاعل مع الزر أدناه للمشاركة!")
+        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/123456789012345678/987654321098765432/giveaway.png")  # رابط صورة فخمة
+        embed.add_field(name="🎊 **How to Participate**", value="اضغط على الزر الأخضر أدناه للمشاركة!", inline=False)
+        embed.add_field(name="👥 **Participants**", value="اضغط على الزر الأزرق لعرض المشاركين.", inline=False)
+
+        view = GiveawayView(duration_seconds, winners, prize)
+        await interaction.response.send_message(embed=embed, view=view)
+        message = await interaction.original_response()
+
+        # إضافة القيف أواي إلى القائمة النشطة
+        self.active_giveaways.append((message.id, winners, prize))
+
+        # الانتظار حتى انتهاء المدة
+        await asyncio.sleep(duration_seconds)
+
+        # جلب الرسالة مرة أخرى بعد انتهاء المدة
+        message = await interaction.channel.fetch_message(message.id)
+        reaction = discord.utils.get(message.reactions, emoji="🎊")
+
+        if reaction and reaction.count > 1:  # يتجاهل البوت نفسه
+            participants = [user async for user in reaction.users() if not user.bot]
+            if len(participants) < winners:
+                await interaction.followup.send("❌ عدد المشاركين أقل من عدد الفائزين! القيف أواي أُلغي تلقائيًا.")
+                return
+
+            # اختيار الفائزين
+            winners_list = random.sample(participants, winners)
+            winners_mentions = ', '.join(winner.mention for winner in winners_list)
+            await interaction.followup.send(f"🎉 تهانينا! الفائزون هم: {winners_mentions} وفازوا بجائزة: **{prize}**")
         else:
-            await ctx.send("❌ لم يشارك أحد في القيف أواي!")
+            await interaction.followup.send("❌ لم يتفاعل أحد مع القيف أواي! تم الإلغاء تلقائيًا.")
 
-async def setup(bot):
+    def parse_duration(self, duration: str) -> int:
+        """
+        تحويل المدة من نص (مثل 5m, 2h, 1d) إلى ثواني.
+        """
+        if duration.endswith("m"):
+            return int(duration[:-1]) * 60
+        elif duration.endswith("h"):
+            return int(duration[:-1]) * 3600
+        elif duration.endswith("d"):
+            return int(duration[:-1]) * 86400
+        else:
+            raise ValueError("صيغة المدة غير صالحة! استخدم `5m` للدقائق، `2h` للساعات، أو `1d` للأيام.")
+
+    def format_duration(self, duration: int) -> str:
+        """
+        تحويل المدة من ثواني إلى تنسيق مقروء (مثل 5 دقائق، 2 ساعات، 1 يوم).
+        """
+        if duration < 60:
+            return f"{duration} ثانية"
+        elif duration < 3600:
+            return f"{duration // 60} دقيقة"
+        elif duration < 86400:
+            return f"{duration // 3600} ساعة"
+        else:
+            return f"{duration // 86400} يوم"
+
+    @app_commands.command(name="cancel_giveaway", description="إلغاء قيف أواي محدد")
+    async def cancel_giveaway(self, interaction: discord.Interaction):
+        if not self.active_giveaways:
+            await interaction.response.send_message("❌ لا يوجد قيف أوايات نشطة حالياً.", ephemeral=True)
+            return
+
+        view = CancelGiveawayView(self.active_giveaways.copy())
+        await interaction.response.send_message("اختر القيف أواي المراد إلغاؤه:", view=view, ephemeral=True)
+
+# تحميل فئة القيف أواي عند تشغيل البوت
+@bot.event
+async def on_ready():
     await bot.add_cog(Giveaway(bot))
+    print(f'✅ {bot.user} متصل بنجاح!')
+    try:
+        synced = await bot.tree.sync()
+        print(f"✅ {len(synced)} أمر سلاش تم تسجيله بنجاح!")
+    except Exception as e:
+        print(f"❌ حدث خطأ أثناء تسجيل الأوامر: {e}")
 
 # تشغيل البوت
 bot.run(os.getenv("TOKEN"))
