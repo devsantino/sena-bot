@@ -420,6 +420,7 @@ async def on_ready():
     except Exception as e:
         print(f"❌ Error syncing commands: {e}")
 
+
 # تشغيل البوت
 bot.run(os.getenv("TOKEN"))
         
