@@ -119,8 +119,7 @@ async def warn(interaction: discord.Interaction, member: discord.Member, reason:
 if NOTIFICATION_CHANNEL:
         channel = bot.get_channel(NOTIFICATION_CHANNEL)
         await channel.send(f"⚠️ {member.mention} تم تحذيره بواسطة {interaction.user.mention} | السبب: {reason}")
-      
-    await interaction.response.send_message(f"❌ {member.mention} لديه بالفعل الحد الأقصى من التحذيرات!", ephemeral=True)
+        await interaction.response.send_message(f"❌ {member.mention} لديه بالفعل الحد الأقصى من التحذيرات!", ephemeral=True)
 
 @bot.tree.command(name="unwarn", description="إزالة أحد تحذيرات عضو")
 async def unwarn(interaction: discord.Interaction, member: discord.Member):
