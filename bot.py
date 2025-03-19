@@ -299,6 +299,7 @@ class Giveaway(commands.Cog):
             description=f"{gift_emoji} **Prize:** {prize}\n{time_emoji} **Duration:** {self.format_duration(duration_seconds)}\n{crown_emoji} **Winners:** {winners}",
             color=discord.Color.purple(),  # لون أرجواني لتتناسب مع الإيموجيات
             timestamp=datetime.utcnow() + timedelta(seconds=duration_seconds)
+        )
         embed.set_footer(text="React below to participate!")
         embed.set_image(url="https://media.discordapp.net/attachments/1248401335687053423/1351895327850106890/giphy.gif?ex=67dc0a23&is=67dab8a3&hm=fa76517ddef005325986be5c41198b9929479668712da44c34bf551630faff85&=&width=660&height=32")  # إضافة GIF
         embed.add_field(name="** **", value="Good luck to everyone!", inline=False)  # نص إضافي
